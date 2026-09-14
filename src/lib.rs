@@ -3,6 +3,7 @@
 //! | | |
 //! |---|---|
 //! | [`import()`] | a dma-buf fd → a `wgpu::Texture` you can sample |
+//! | [`export()`] | a `wgpu::Texture` you can render into → a dma-buf fd |
 //! | [`modifiers()`] | which DRM format modifiers this adapter will actually share |
 //!
 //! # Vulkan only, and deliberately
@@ -24,12 +25,14 @@
 
 pub mod dmabuf;
 pub mod error;
+pub mod export;
 pub mod format;
 pub mod import;
 pub mod modifiers;
 
 pub use dmabuf::{Dmabuf, DmabufPlane};
 pub use error::{Error, Result};
+pub use export::{export, ExportDescriptor};
 pub use format::Fourcc;
 pub use import::{import, import_with_state, IMPORT_STATE};
 pub use modifiers::{modifiers, shareable, Modifier};
