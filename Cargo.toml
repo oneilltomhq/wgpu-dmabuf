@@ -1,0 +1,46 @@
+[package]
+name = "wgpu-dmabuf"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+authors = ["Tom O'Neill"]
+license = "MIT"
+repository = "https://github.com/oneilltomhq/wgpu-dmabuf"
+description = "Linux dma-buf interop for wgpu: import a dmabuf as a wgpu::Texture, export a wgpu texture as a dmabuf, enumerate DRM format modifiers, and fence across devices with sync_file. Vulkan backend only."
+keywords = ["wgpu", "dmabuf", "vulkan", "drm", "wayland"]
+categories = ["graphics", "rendering::graphics-api", "os::linux-apis"]
+readme = "README.md"
+exclude = ["/.github", "/target"]
+
+[dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = [
+    "std",
+    "vulkan",
+    "wgsl",
+] }
+# Pinned to the exact version `wgpu` depends on: the hal types crossing this
+# crate's API (`hal::vulkan::Api`, `hal::TextureDescriptor`) must be *the same*
+# crate instance wgpu was built against, not a semver-compatible second copy.
+wgpu-hal = { version = "=30.0.1", default-features = false, features = [
+    "vulkan",
+] }
+ash = { version = "0.38", default-features = false, features = ["loaded"] }
+libc = "0.2"
+drm-fourcc = "2"
+
+gbm = { version = "0.18", default-features = false, features = [
+    "drm-support",
+], optional = true }
+
+[dev-dependencies]
+pollster = "0.4"
+
+[features]
+default = []
+# A GBM-backed allocator used by the test suite (and usable by downstream
+# integration tests) to mint a real dma-buf to import. Pulls in libgbm.
+gbm = ["dep:gbm"]
+
+[package.metadata.docs.rs]
+all-features = true
+targets = ["x86_64-unknown-linux-gnu"]
