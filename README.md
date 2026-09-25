@@ -126,8 +126,8 @@ absent or no Vulkan adapter can be opened — "there is no GPU here" and "the GP
 got it wrong" must not look alike.
 
 Measured on this machine — Intel Iris Xe Graphics (RPL-U), Mesa 25.3.6, kernel
-7.1.9, `/dev/dri/renderD128` — **19 passed, 0 failed, 0 skipped**
-(12 unit + 6 integration + 1 doc):
+7.1.9, `/dev/dri/renderD128` — **22 passed, 0 failed, 0 skipped**
+(14 unit + 7 integration + 1 doc):
 
 * `import_a_gbm_dmabuf_and_sample_it_byte_exact` — a 256×256 `ARGB8888` LINEAR
   buffer allocated and filled by GBM on the CPU, imported, sampled with
@@ -138,6 +138,10 @@ Measured on this machine — Intel Iris Xe Graphics (RPL-U), Mesa 25.3.6, kernel
   through the public import path and sampled: **byte-exact**. A wrong modifier,
   stride or offset fails here and would not fail a plain
   `copy_texture_to_buffer`.
+* `a_completion_fence_attaches_to_a_dmabuf_as_its_write_fence` — a completion
+  fence imported into a GBM dma-buf with `IMPORT_SYNC_FILE`; `EXPORT_SYNC_FILE`
+  for a reader then hands back that fence (provenance
+  `driver="0000:00:02.0"`, unsignalled at export), and it signals.
 * `a_completion_fence_exports_a_sync_file_that_signals` — arm → submit →
   export, and the fd signals within a bounded poll. Provenance read back from
   the fd at export time: `driver="0000:00:02.0" obj="…[pid]" status=0` — an

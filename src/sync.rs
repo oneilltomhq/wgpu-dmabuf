@@ -4,7 +4,7 @@
 //! whatsoever, and the failure mode of missing ordering is not a crash — it is
 //! a frame late, every frame, forever. This module is the explicit-sync half.
 //!
-//! Three mechanisms, all `sync_file`-shaped, all measured on Mesa `anv` /
+//! Four mechanisms, all `sync_file`-shaped, all measured on Mesa `anv` /
 //! Intel Iris Xe / kernel 7.1:
 //!
 //! * [`CompletionFence`] — **egress**. "When the next submit on this queue
@@ -18,6 +18,10 @@
 //!   kernel (`DMA_BUF_IOCTL_EXPORT_SYNC_FILE`, Linux 5.20+) for the implicit
 //!   fences already attached to that buffer. This is how you get an acquire
 //!   fence for a producer whose submits you did not issue.
+//! * [`import_sync_file`] — the **producer** sink, its mirror
+//!   (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`): attach a [`CompletionFence`]'s
+//!   `sync_file` to a dma-buf, so a consumer that syncs implicitly waits for
+//!   a render Vulkan would otherwise not have told it about.
 //!
 //! # What is *not* here
 //!
@@ -255,6 +259,76 @@ pub fn export_sync_file(dmabuf: BorrowedFd<'_>, direction: SyncDirection) -> Res
         sync_file,
         already_signalled,
     })
+}
+
+// ---------------------------------------------------------------------------
+// DMA_BUF_IOCTL_IMPORT_SYNC_FILE
+// ---------------------------------------------------------------------------
+
+/// `IMPORT_SYNC_FILE` is nr 3, `_IOW` over an 8-byte struct:
+///
+/// ```text
+///   _IOW('b', 3, struct dma_buf_import_sync_file)
+///     = _IOC_WRITE << 30 | 8 << 16 | 'b' << 8 | 3
+/// ```
+///
+/// Checked against `/usr/include/linux/dma-buf.h` on this machine by compiling
+/// it (`0x40086203`, size 8), and recomputed in the tests below.
+const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: libc::c_ulong = 0x4008_6203;
+
+/// `struct dma_buf_import_sync_file`. Both fields are in.
+#[repr(C)]
+struct ImportSyncFileArg {
+    flags: u32,
+    fd: i32,
+}
+
+/// Attach a `sync_file` to a dma-buf's reservation object, so that implicitly
+/// synchronised users of the buffer wait for it.
+///
+/// This is the **producer** half that [`export_sync_file`] is the consumer
+/// half of. A Vulkan producer renders into a dma-buf and hands it to someone
+/// who syncs implicitly (GL, a media driver, a PipeWire consumer that imports
+/// into EGL): Vulkan attached nothing to the buffer, so they would read it
+/// before the GPU finished. Export the render's completion
+/// ([`CompletionFence`]) and import it here with [`SyncDirection::Write`], and
+/// the buffer carries a write fence like a GL render would have left.
+///
+/// ```text
+///   Read  -> added as a read fence: later writers wait for it
+///   Write -> added as a write fence: every later user waits for it
+/// ```
+///
+/// The kernel takes its own reference to the fence; `fence` is only borrowed
+/// and can be dropped afterwards.
+///
+/// `ENOTTY` means the kernel predates dma-buf explicit sync (< 5.20); `EINVAL`
+/// a bad flag or an fd that is not a `sync_file`. Unlike [`export_sync_file`]
+/// there is a sane fallback for a caller here: wait on `fence` on the CPU
+/// before handing the buffer on.
+pub fn import_sync_file(
+    dmabuf: BorrowedFd<'_>,
+    fence: BorrowedFd<'_>,
+    direction: SyncDirection,
+) -> Result<()> {
+    let mut arg = ImportSyncFileArg {
+        flags: direction.flags(),
+        fd: fence.as_raw_fd(),
+    };
+    // SAFETY: `arg` is a live `#[repr(C)]` value of exactly the layout the
+    // kernel expects; both fds are borrowed and valid for this call, and the
+    // kernel does not take ownership of either.
+    let rc = unsafe {
+        libc::ioctl(
+            dmabuf.as_raw_fd(),
+            DMA_BUF_IOCTL_IMPORT_SYNC_FILE,
+            std::ptr::addr_of_mut!(arg),
+        )
+    };
+    if rc != 0 {
+        return Err(Error::Io(io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +878,29 @@ mod tests {
         let computed =
             ((IOC_READ | IOC_WRITE) << 30) | (size << 16) | ((b'>' as libc::c_ulong) << 8) | 4;
         assert_eq!(computed, SYNC_IOC_FILE_INFO);
+    }
+
+    /// The import ioctl, recomputed from `_IOW` the same way.
+    #[test]
+    fn import_sync_file_ioctl_matches_the_iow_formula() {
+        const IOC_WRITE: libc::c_ulong = 1;
+        let size = core::mem::size_of::<ImportSyncFileArg>() as libc::c_ulong;
+        assert_eq!(size, 8, "struct dma_buf_import_sync_file is two 32-bit words");
+        let computed = (IOC_WRITE << 30) | (size << 16) | ((b'b' as libc::c_ulong) << 8) | 3;
+        assert_eq!(computed, DMA_BUF_IOCTL_IMPORT_SYNC_FILE);
+    }
+
+    /// Same refusal for the import: a fence attached to something that is
+    /// not a dma-buf must be an error, or a caller would skip its CPU wait.
+    #[test]
+    fn a_character_device_takes_no_fence() {
+        let f = std::fs::File::open("/dev/null").expect("open /dev/null");
+        let err = import_sync_file(f.as_fd(), f.as_fd(), SyncDirection::Write)
+            .expect_err("/dev/null has no dma-buf ioctls");
+        match err {
+            Error::Io(e) => assert_eq!(e.raw_os_error(), Some(libc::ENOTTY), "got {e}"),
+            other => panic!("expected an io error, got {other}"),
+        }
     }
 
     /// The direction flags are the half of this API that is easy to get exactly

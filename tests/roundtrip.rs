@@ -541,6 +541,59 @@ fn an_acquire_semaphore_accepts_an_exported_fence() {
     );
 }
 
+/// The producer's handshake: a render's completion fence, attached to a real
+/// GBM dma-buf as its write fence, is what an implicitly synchronised reader
+/// of that buffer then gets back from `EXPORT_SYNC_FILE`.
+///
+/// Like the acquire test this proves the plumbing — the kernel took the fence
+/// and hands a fence back for readers — and prints the provenance so a run
+/// shows whose fence it was. The ordering claim is the kernel's.
+#[test]
+fn a_completion_fence_attaches_to_a_dmabuf_as_its_write_fence() {
+    let c = gpu_or_skip!();
+    if !c.caps.external_semaphore_fd {
+        eprintln!("SKIP: VK_KHR_external_semaphore_fd unavailable on this driver");
+        return;
+    }
+    let Some(alloc) = GbmAllocator::open_default() else {
+        eprintln!("SKIP: cannot open a GBM device on the render node");
+        return;
+    };
+    let buf = alloc
+        .allocate_linear(W, H, Fourcc::Argb8888, argb8888_pixel)
+        .expect("gbm allocation");
+    let fd = &buf.dmabuf.sole_plane().expect("one plane").fd;
+    let completion = wgpu_dmabuf::sync::CompletionFence::new(&c.device).expect("CompletionFence");
+    let (sync_file, _) = completion
+        .export_for_submit(&c.queue, || {
+            let enc = c.device.create_command_encoder(&Default::default());
+            c.queue.submit([enc.finish()])
+        })
+        .expect("export");
+    use std::os::fd::AsFd;
+    wgpu_dmabuf::sync::import_sync_file(
+        fd.as_fd(),
+        sync_file.as_fd(),
+        wgpu_dmabuf::sync::SyncDirection::Write,
+    )
+    .expect("DMA_BUF_IOCTL_IMPORT_SYNC_FILE");
+    let back = wgpu_dmabuf::sync::export_sync_file(fd.as_fd(), wgpu_dmabuf::sync::SyncDirection::Read)
+        .expect("export for a reader");
+    eprintln!(
+        "a reader waits on: {}",
+        wgpu_dmabuf::sync::provenance_line(&back.sync_file.provenance().expect("provenance"))
+    );
+    assert!(
+        back.sync_file
+            .wait_timeout(std::time::Duration::from_secs(5))
+            .expect("poll"),
+        "the reader's fence never signalled"
+    );
+    c.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("drain");
+}
+
 /// The finding this crate's `device` module exists for: a **stock**
 /// `request_device` does not enable `VK_KHR_external_semaphore_fd`, so the
 /// semaphore types refuse to build on it.

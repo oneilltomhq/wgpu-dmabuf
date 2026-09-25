@@ -29,6 +29,10 @@ First cut. Everything below is new.
   `poll(2)` wait, and `FenceInfo` provenance via `SYNC_IOC_FILE_INFO`.
   `ExportedFence::already_signalled` reports the vacuous-wait case, because
   `DMA_BUF_IOCTL_EXPORT_SYNC_FILE` never fails for want of a fence.
+  `import_sync_file()` is the producer's mirror
+  (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`): a `CompletionFence`'s `sync_file`
+  attached to a dma-buf as a write fence, for a consumer that syncs
+  implicitly.
 - `device::open_device()` — a `wgpu::Device` whose `VkDevice` has
   `VK_KHR_external_semaphore_fd` enabled. Stock `request_device` never enables
   it, so the fence path is uncallable without this.
