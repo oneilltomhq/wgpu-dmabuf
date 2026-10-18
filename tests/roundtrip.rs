@@ -633,3 +633,33 @@ fn stock_request_device_cannot_fence() {
         ),
     }
 }
+
+/// **The render node is the one the driver opened**, checked against the
+/// kernel rather than against itself: the node's sysfs PCI vendor is the
+/// adapter's vendor, and the device file carries the same `dev_t`.
+#[test]
+fn the_render_node_is_this_adapters() {
+    let c = gpu_or_skip!();
+    let info = c.adapter.get_info();
+    let node = wgpu_dmabuf::device::render_node(&c.adapter).expect("render_node");
+    if info.device_type == wgpu::DeviceType::Cpu {
+        assert_eq!(node, None, "a software adapter has no render node");
+        return;
+    }
+    let dev = node.expect("a hardware adapter on Mesa or NVIDIA has a render node");
+    let (major, minor) = (libc::major(dev), libc::minor(dev));
+    eprintln!("render node {major}:{minor} for {}", info.name);
+    assert!(
+        minor >= 128,
+        "{major}:{minor} is a primary node, not a render node"
+    );
+
+    let path = format!("/dev/dri/renderD{minor}");
+    let rdev = std::os::unix::fs::MetadataExt::rdev(&std::fs::metadata(&path).expect(&path));
+    assert_eq!(rdev, dev, "{path} is not the device the driver named");
+
+    let vendor = std::fs::read_to_string(format!("/sys/dev/char/{major}:{minor}/device/vendor"))
+        .expect("sysfs vendor");
+    let vendor = u32::from_str_radix(vendor.trim().trim_start_matches("0x"), 16).unwrap();
+    assert_eq!(vendor, info.vendor, "the node belongs to another GPU");
+}
