@@ -194,3 +194,45 @@ pub fn vk_device_handle(device: &wgpu::Device) -> Option<u64> {
             .map(|hal| hal.raw_device().handle().as_raw())
     }
 }
+
+/// The DRM render node behind `adapter`, as the `dev_t` a Wayland compositor
+/// names in `zwp_linux_dmabuf_feedback_v1.main_device`.
+///
+/// Asked of the Vulkan physical device through `VK_EXT_physical_device_drm`,
+/// not worked out from its PCI address: the driver knows which node it opened,
+/// and a non-PCI GPU or a sandbox without `/sys/bus/pci` has no address to
+/// work from. The extension needs only to be offered, not enabled, since this
+/// is a physical-device query.
+///
+/// `Ok(None)` means there is no render node to name: a software adapter
+/// (lavapipe has none) or a driver without the extension. A compositor in that
+/// case can still offer dma-buf, but Mesa's EGL takes its GPU from this node
+/// and nowhere else, so its GL clients will render on the CPU.
+pub fn render_node(adapter: &wgpu::Adapter) -> Result<Option<libc::dev_t>> {
+    // SAFETY: plain queries on the adapter's live physical device.
+    unsafe {
+        let hal_adapter = adapter.as_hal::<Vulkan>().ok_or(Error::NotVulkan)?;
+        let instance = hal_adapter.shared_instance().raw_instance();
+        let pdev = hal_adapter.raw_physical_device();
+
+        let offered = instance
+            .enumerate_device_extension_properties(pdev)
+            .map_err(Error::vk("vkEnumerateDeviceExtensionProperties"))?
+            .iter()
+            .any(|p| p.extension_name_as_c_str() == Ok(ash::ext::physical_device_drm::NAME));
+        if !offered {
+            return Ok(None);
+        }
+
+        let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
+        let mut props = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
+        instance.get_physical_device_properties2(pdev, &mut props);
+        if drm.has_render == vk::FALSE {
+            return Ok(None);
+        }
+        Ok(Some(libc::makedev(
+            drm.render_major as u32,
+            drm.render_minor as u32,
+        )))
+    }
+}

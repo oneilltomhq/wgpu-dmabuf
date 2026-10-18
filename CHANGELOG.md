@@ -36,6 +36,11 @@ First cut. Everything below is new.
 - `device::open_device()` — a `wgpu::Device` whose `VkDevice` has
   `VK_KHR_external_semaphore_fd` enabled. Stock `request_device` never enables
   it, so the fence path is uncallable without this.
+- `device::render_node()` — the adapter's DRM render node as a `dev_t`, from
+  `VK_EXT_physical_device_drm`, for a compositor's
+  `zwp_linux_dmabuf_feedback_v1.main_device`. Mesa's EGL takes its GPU from
+  that event alone; a compositor that offers dma-buf without it gets GL
+  clients rendering on llvmpipe.
 - `Dmabuf` / `DmabufPlane` description types, a `format` mapping table between
   DRM fourccs, `wgpu::TextureFormat` and `VkFormat`, and a non-exhaustive
   `Error`.
