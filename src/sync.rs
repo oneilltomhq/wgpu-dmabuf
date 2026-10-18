@@ -885,7 +885,10 @@ mod tests {
     fn import_sync_file_ioctl_matches_the_iow_formula() {
         const IOC_WRITE: libc::c_ulong = 1;
         let size = core::mem::size_of::<ImportSyncFileArg>() as libc::c_ulong;
-        assert_eq!(size, 8, "struct dma_buf_import_sync_file is two 32-bit words");
+        assert_eq!(
+            size, 8,
+            "struct dma_buf_import_sync_file is two 32-bit words"
+        );
         let computed = (IOC_WRITE << 30) | (size << 16) | ((b'b' as libc::c_ulong) << 8) | 3;
         assert_eq!(computed, DMA_BUF_IOCTL_IMPORT_SYNC_FILE);
     }

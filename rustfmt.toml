@@ -1,0 +1,4 @@
+# rustfmt's defaults, written down, as glasspane does. The tree was already
+# formatted at the default width; the file exists so that the setting is
+# stated and a rustfmt.toml in a parent directory is never picked up instead.
+max_width = 100

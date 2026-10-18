@@ -577,8 +577,9 @@ fn a_completion_fence_attaches_to_a_dmabuf_as_its_write_fence() {
         wgpu_dmabuf::sync::SyncDirection::Write,
     )
     .expect("DMA_BUF_IOCTL_IMPORT_SYNC_FILE");
-    let back = wgpu_dmabuf::sync::export_sync_file(fd.as_fd(), wgpu_dmabuf::sync::SyncDirection::Read)
-        .expect("export for a reader");
+    let back =
+        wgpu_dmabuf::sync::export_sync_file(fd.as_fd(), wgpu_dmabuf::sync::SyncDirection::Read)
+            .expect("export for a reader");
     eprintln!(
         "a reader waits on: {}",
         wgpu_dmabuf::sync::provenance_line(&back.sync_file.provenance().expect("provenance"))
