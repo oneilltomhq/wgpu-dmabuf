@@ -9,6 +9,7 @@ Linux **dma-buf interop for [wgpu](https://wgpu.rs)**, on the Vulkan backend.
 | `modifiers` / `shareable` | which DRM format modifiers this adapter will actually share |
 | `sync` | `sync_file` fences across devices and processes |
 | `device::open_device` | a `VkDevice` that can do all four |
+| `device::render_node` | the adapter's DRM render node as a `dev_t`, for `zwp_linux_dmabuf_feedback_v1.main_device` |
 
 It is a thin layer of [`ash`](https://crates.io/crates/ash) against the
 `VkDevice` wgpu already owns — no fork of wgpu, no patched branch, no second
@@ -26,14 +27,14 @@ let texture = wgpu_dmabuf::import(&device, &buf, wgpu::TextureUsages::TEXTURE_BI
 
 This crate builds against **crates.io `wgpu = "30.0.1"`** and nothing else. The
 question was worth asking, because the prior art this crate was extracted from
-ran against a vendored wgpu branch. The answer, checked against
-`~/.cargo/registry/src/*/wgpu-hal-30.0.1/`:
+ran against a vendored wgpu branch. The answer, checked against the wgpu-hal
+30.0.1 source (gfx-rs/wgpu tag [`v30.0.1`](https://github.com/gfx-rs/wgpu/tree/v30.0.1/wgpu-hal)):
 
 | what | in crates.io wgpu-hal 30.0.1? |
 |---|---|
-| `vulkan::Device::texture_from_dmabuf_fd` | **yes** — `src/vulkan/device.rs:525`, single-plane, gated on `Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF` |
+| `vulkan::Device::texture_from_dmabuf_fd` | **yes** — [`src/vulkan/device.rs:525`](https://github.com/gfx-rs/wgpu/blob/v30.0.1/wgpu-hal/src/vulkan/device.rs#L525), single-plane, gated on `Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF` |
 | `vulkan::Device::texture_from_raw` + `TextureMemory::External` | **yes** |
-| `vulkan::Queue::add_wait_semaphore` / `add_signal_semaphore` / `remove_*` | **yes** — `src/vulkan/mod.rs:1524-1574` |
+| `vulkan::Queue::add_wait_semaphore` / `add_signal_semaphore` / `remove_*` | **yes** — [`src/vulkan/mod.rs:1524-1574`](https://github.com/gfx-rs/wgpu/blob/v30.0.1/wgpu-hal/src/vulkan/mod.rs#L1524-L1574) |
 | `Adapter::device_from_raw`, `required_device_extensions`, `physical_device_features` | **yes** |
 | `VK_KHR_external_memory_fd`, `VK_EXT_external_memory_dma_buf`, `VK_EXT_image_drm_format_modifier` enabled by `request_device` | **yes**, when the driver has them |
 | a dma-buf **export** helper | **no** — done here with raw `ash` |
@@ -125,9 +126,9 @@ Tests that need a GPU **skip** (they do not fail) when `/dev/dri/renderD*` is
 absent or no Vulkan adapter can be opened — "there is no GPU here" and "the GPU
 got it wrong" must not look alike.
 
-Measured on this machine — Intel Iris Xe Graphics (RPL-U), Mesa 25.3.6, kernel
-7.1.9, `/dev/dri/renderD128` — **22 passed, 0 failed, 0 skipped**
-(14 unit + 7 integration + 1 doc):
+Measured on an Intel Iris Xe Graphics (RPL-U), Mesa 25.3.6, kernel 7.1.9,
+`/dev/dri/renderD128` — **23 passed, 0 failed, 0 skipped**
+(14 unit + 8 integration + 1 doc):
 
 * `import_a_gbm_dmabuf_and_sample_it_byte_exact` — a 256×256 `ARGB8888` LINEAR
   buffer allocated and filled by GBM on the CPU, imported, sampled with
@@ -153,6 +154,10 @@ Measured on this machine — Intel Iris Xe Graphics (RPL-U), Mesa 25.3.6, kernel
 * `modifiers_are_enumerable_and_shareable_is_a_subset` — 5 modifiers for
   `ARGB8888`, 3 of them single-plane and dma-buf shareable both ways.
 * `stock_request_device_cannot_fence` — the finding above, as a regression test.
+* `the_render_node_is_this_adapters` — `device::render_node` names
+  `226:128`, checked against the kernel rather than against itself:
+  `/dev/dri/renderD128` carries that `dev_t`, and its sysfs PCI vendor is the
+  adapter's.
 * Unit tests recompute both `_IOWR` ioctl numbers from the formula, pin the
   fourcc channel order, and check that a non-dma-buf fd is refused with
   `ENOTTY` rather than silently treated as fenceless.
