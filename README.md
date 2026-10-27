@@ -1,5 +1,7 @@
 # wgpu-dmabuf
 
+[![CI](https://github.com/oneilltomhq/wgpu-dmabuf/actions/workflows/ci.yml/badge.svg)](https://github.com/oneilltomhq/wgpu-dmabuf/actions/workflows/ci.yml)
+
 Linux **dma-buf interop for [wgpu](https://wgpu.rs)**, on the Vulkan backend.
 
 | | |

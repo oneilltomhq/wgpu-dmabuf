@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt, clippy, test, doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # libgbm is the only native library linked (by the `gbm` feature); the
+      # Vulkan loader is dlopen'd at run time and is not needed to build.
+      - run: sudo apt-get update && sudo apt-get install -y libgbm-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --features gbm -- -D warnings
+      # The runner has no /dev/dri, so every GPU test takes its SKIP branch
+      # and passes; what runs for real here is the unit and doc tests.
+      - run: cargo test --features gbm
+      - run: cargo doc --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    name: build on MSRV (1.87)
+    runs-on: ubuntu-latest
+    env:
+      # No Cargo.lock is committed; resolve to versions that support 1.87.
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgbm-dev
+      - uses: dtolnay/rust-toolchain@1.87
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --features gbm
