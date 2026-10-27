@@ -122,6 +122,9 @@ Each of these is in the doc comment of the item it affects, not just here.
 cargo test --features gbm
 ```
 
+The integration tests mint their dma-bufs with GBM, so without `--features gbm`
+only the unit and doc tests are built.
+
 Tests that need a GPU **skip** (they do not fail) when `/dev/dri/renderD*` is
 absent or no Vulkan adapter can be opened — "there is no GPU here" and "the GPU
 got it wrong" must not look alike.
