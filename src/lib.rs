@@ -1,6 +1,6 @@
 //! Linux dma-buf interop for [`wgpu`], on the Vulkan backend.
 //!
-//! Four things, each of which is a small amount of `ash` against the `VkDevice`
+//! Five things, each of which is a small amount of `ash` against the `VkDevice`
 //! wgpu already owns:
 //!
 //! | | |
@@ -9,6 +9,7 @@
 //! | [`export()`] | a `wgpu::Texture` you can render into → a dma-buf fd |
 //! | [`modifiers()`] | which DRM format modifiers this adapter will actually share |
 //! | [`sync`] | `sync_file` fences across devices and processes |
+//! | [`device::render_node`] | the adapter's DRM render node as a `dev_t`, for `zwp_linux_dmabuf_feedback_v1.main_device` |
 //!
 //! ```no_run
 //! use wgpu_dmabuf::{Dmabuf, format::Fourcc};
@@ -63,7 +64,6 @@
 #![cfg(target_os = "linux")]
 #![deny(missing_debug_implementations)]
 #![warn(missing_docs)]
-#![doc(html_root_url = "https://docs.rs/wgpu-dmabuf/0.1.0")]
 
 pub mod device;
 pub mod dmabuf;

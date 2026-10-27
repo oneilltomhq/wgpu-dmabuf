@@ -272,8 +272,8 @@ pub fn export_sync_file(dmabuf: BorrowedFd<'_>, direction: SyncDirection) -> Res
 ///     = _IOC_WRITE << 30 | 8 << 16 | 'b' << 8 | 3
 /// ```
 ///
-/// Checked against `/usr/include/linux/dma-buf.h` on this machine by compiling
-/// it (`0x40086203`, size 8), and recomputed in the tests below.
+/// Checked against the kernel's `linux/dma-buf.h` uapi header by compiling it
+/// (`0x40086203`, size 8), and recomputed in the tests below.
 const DMA_BUF_IOCTL_IMPORT_SYNC_FILE: libc::c_ulong = 0x4008_6203;
 
 /// `struct dma_buf_import_sync_file`. Both fields are in.
